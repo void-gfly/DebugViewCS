@@ -361,4 +361,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
-/publish_output/win-x64/DebugViewCS.exe
+publish_output/
+*.zip
+prompt/
