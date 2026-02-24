@@ -1,0 +1,231 @@
+# DebugViewCS — .NET 10 WPF 现代化 Debug Info 查看器
+
+基于 DebugView++ 的核心原理（OutputDebugString 共享内存协议），用纯 C# 重新实现消息捕获引擎，搭配 WPF Fluent Design UI。
+
+## Proposed Changes
+
+### 解决方案结构
+
+```
+e:\dot_net\DebugViewCS\
+├── DebugViewCS.sln
+├── src\
+│   ├── DebugViewCS\                    # WPF GUI 主项目
+│   │   ├── DebugViewCS.csproj
+│   │   ├── App.xaml / App.xaml.cs
+│   │   ├── MainWindow.xaml / MainWindow.xaml.cs
+│   │   ├── ViewModels\
+│   │   │   └── MainViewModel.cs
+│   │   ├── Views\
+│   │   │   └── LogView.xaml / LogView.xaml.cs
+│   │   ├── Converters\
+│   │   │   └── ProcessColorConverter.cs
+│   │   └── Resources\
+│   │       └── Styles.xaml
+│   │
+│   └── DebugViewCS.Core\              # 核心库（无 UI 依赖）
+│       ├── DebugViewCS.Core.csproj
+│       ├── Models\
+│       │   └── LogEntry.cs
+│       ├── Capture\
+│       │   ├── ILogSource.cs
+│       │   ├── DbWinReader.cs
+│       │   └── LogSourceManager.cs
+│       ├── Filters\
+│       │   ├── LogFilter.cs
+│       │   └── FilterEngine.cs
+│       ├── Storage\
+│       │   └── LogStore.cs
+│       └── Utils\
+│           └── ProcessResolver.cs
+│
+└── tests\
+    └── DebugViewCS.Core.Tests\
+        ├── DebugViewCS.Core.Tests.csproj
+        ├── FilterEngineTests.cs
+        └── LogStoreTests.cs
+```
+
+---
+
+### 核心库 (DebugViewCS.Core)
+
+#### [NEW] [DebugViewCS.Core.csproj](file:///e:/dot_net/DebugViewCS/src/DebugViewCS.Core/DebugViewCS.Core.csproj)
+- .NET 10 类库，`net10.0-windows` TFM
+- 无 UI 依赖，仅引用 `System.IO.MemoryMappedFiles`
+
+#### [NEW] [LogEntry.cs](file:///e:/dot_net/DebugViewCS/src/DebugViewCS.Core/Models/LogEntry.cs)
+
+日志条目数据模型：
+
+```csharp
+public sealed record LogEntry
+{
+    public long Id { get; init; }           // 行号
+    public DateTime Timestamp { get; init; } // 系统时间
+    public int ProcessId { get; init; }     // PID
+    public string ProcessName { get; init; } // 进程名
+    public string Message { get; init; }    // 消息内容
+}
+```
+
+#### [NEW] [ILogSource.cs](file:///e:/dot_net/DebugViewCS/src/DebugViewCS.Core/Capture/ILogSource.cs)
+
+日志源接口：
+
+```csharp
+public interface ILogSource : IDisposable
+{
+    string Name { get; }
+    IAsyncEnumerable<LogEntry> ReadAsync(CancellationToken ct);
+}
+```
+
+#### [NEW] [DbWinReader.cs](file:///e:/dot_net/DebugViewCS/src/DebugViewCS.Core/Capture/DbWinReader.cs)
+
+核心 OutputDebugString 消息捕获器，使用 `MemoryMappedFile` + `EventWaitHandle`：
+
+- 创建 `DBWIN_BUFFER`（4KB 共享内存）
+- 创建 `DBWIN_BUFFER_READY` / `DBWIN_DATA_READY` 事件
+- 支持 `global` 参数控制是否监听全局（Session 0）消息
+- 异步读取循环，通过 `IAsyncEnumerable<LogEntry>` 输出
+- 协议：Set `BUFFER_READY` → Wait `DATA_READY` → Read [PID(4 bytes) + Message(4092 bytes)] → 循环
+
+#### [NEW] [LogSourceManager.cs](file:///e:/dot_net/DebugViewCS/src/DebugViewCS.Core/Capture/LogSourceManager.cs)
+
+管理多个 `ILogSource`，合并消息流：
+
+- 启动/停止所有数据源
+- 将消息写入 `LogStore`
+- 使用 `Channel<LogEntry>` 做异步消息汇聚
+
+#### [NEW] [ProcessResolver.cs](file:///e:/dot_net/DebugViewCS/src/DebugViewCS.Core/Utils/ProcessResolver.cs)
+
+PID → 进程名缓存：
+
+- `ConcurrentDictionary<int, string>` 缓存
+- `Process.GetProcessById(pid).ProcessName` 获取名称
+- 进程退出后缓存清理策略（LRU 或弱引用）
+
+#### [NEW] [LogStore.cs](file:///e:/dot_net/DebugViewCS/src/DebugViewCS.Core/Storage/LogStore.cs)
+
+线程安全的日志存储：
+
+- 环形缓冲区，默认容量 100,000 条
+- `Add(LogEntry)` — 线程安全追加
+- `GetEntries(int startIndex, int count)` — 按范围读取
+- `Clear()` — 清空
+- `OnEntriesAdded` 事件通知
+
+#### [NEW] [FilterEngine.cs](file:///e:/dot_net/DebugViewCS/src/DebugViewCS.Core/Filters/FilterEngine.cs)
+
+过滤引擎：
+
+- `LogFilter` 数据模型（Pattern / Type / MatchMode）
+- `FilterType`: Include, Exclude, Highlight
+- `IsMatch(LogEntry, IList<LogFilter>)` — 过滤判定
+- 支持简单文本和 `Regex` 两种匹配模式
+
+---
+
+### WPF GUI (DebugViewCS)
+
+#### [NEW] [DebugViewCS.csproj](file:///e:/dot_net/DebugViewCS/src/DebugViewCS/DebugViewCS.csproj)
+- .NET 10 WPF 应用，`net10.0-windows` TFM
+- NuGet: `WPF-UI`, `CommunityToolkit.Mvvm`
+
+#### [NEW] [App.xaml](file:///e:/dot_net/DebugViewCS/src/DebugViewCS/App.xaml) / [App.xaml.cs](file:///e:/dot_net/DebugViewCS/src/DebugViewCS/App.xaml.cs)
+- 配置 WPF-UI Fluent 主题（暗色模式）
+- DI 容器注册服务
+
+#### [NEW] [MainWindow.xaml](file:///e:/dot_net/DebugViewCS/src/DebugViewCS/MainWindow.xaml) / [MainWindow.xaml.cs](file:///e:/dot_net/DebugViewCS/src/DebugViewCS/MainWindow.xaml.cs)
+- Fluent Design 风格窗口（`FluentWindow`）
+- 顶部工具栏：捕获开关、清除、暂停、滚动锁定、过滤输入框
+- 中间：日志列表区域（`LogView` UserControl）
+- 底部状态栏：消息总数、可见数、内存使用
+
+#### [NEW] [MainViewModel.cs](file:///e:/dot_net/DebugViewCS/src/DebugViewCS/ViewModels/MainViewModel.cs)
+- MVVM ViewModel，继承 `ObservableObject`
+- 属性：`IsCapturing`, `AutoScroll`, `FilterText`, `LogEntries`
+- 命令：`StartCapture`, `StopCapture`, `Clear`, `ToggleAutoScroll`
+- 使用 `DispatcherTimer` 批量刷新 UI（16ms=60fps）
+- 从 `LogStore` 读取新消息，应用 `FilterEngine` 后追加到 `ObservableCollection`
+
+#### [NEW] [LogView.xaml](file:///e:/dot_net/DebugViewCS/src/DebugViewCS/Views/LogView.xaml)
+- 虚拟化 `ListView`，列：行号 / 时间 / PID / 进程名 / 消息
+- `VirtualizingStackPanel.IsVirtualizing="True"`
+- `VirtualizingStackPanel.VirtualizationMode="Recycling"`
+- 交替行颜色，进程颜色自动分配
+
+#### [NEW] [ProcessColorConverter.cs](file:///e:/dot_net/DebugViewCS/src/DebugViewCS/Converters/ProcessColorConverter.cs)
+- `IValueConverter`，按进程名分配颜色（HSL 色环均匀取色）
+
+---
+
+### 单元测试
+
+#### [NEW] [DebugViewCS.Core.Tests.csproj](file:///e:/dot_net/DebugViewCS/tests/DebugViewCS.Core.Tests/DebugViewCS.Core.Tests.csproj)
+- xUnit + FluentAssertions
+
+#### [NEW] [FilterEngineTests.cs](file:///e:/dot_net/DebugViewCS/tests/DebugViewCS.Core.Tests/FilterEngineTests.cs)
+- 测试 Include / Exclude / 正则匹配逻辑
+
+#### [NEW] [LogStoreTests.cs](file:///e:/dot_net/DebugViewCS/tests/DebugViewCS.Core.Tests/LogStoreTests.cs)
+- 测试环形缓冲区容量限制、线程安全、范围读取
+
+---
+
+## Verification Plan
+
+### Automated Tests
+
+1. **单元测试**
+
+```pwsh
+cd e:\dot_net\DebugViewCS
+dotnet test tests\DebugViewCS.Core.Tests
+```
+
+验证 `FilterEngine` 和 `LogStore` 的核心逻辑。
+
+2. **构建验证**
+
+```pwsh
+cd e:\dot_net\DebugViewCS
+dotnet build src\DebugViewCS\DebugViewCS.csproj
+```
+
+确保所有项目编译通过。
+
+### Manual Verification
+
+3. **OutputDebugString 消息捕获测试**
+
+启动 DebugViewCS 应用后，在另一个终端运行测试发送程序：
+
+```pwsh
+# 方法 1: 使用 PowerShell P/Invoke 发送 OutputDebugString
+Add-Type -TypeDefinition @"
+using System.Runtime.InteropServices;
+public class DebugHelper {
+    [DllImport("kernel32.dll")]
+    public static extern void OutputDebugStringA(string lpOutputString);
+}
+"@
+1..10 | ForEach-Object { [DebugHelper]::OutputDebugStringA("Test message $_"); Start-Sleep -Milliseconds 100 }
+```
+
+**预期**：DebugViewCS 主窗口的日志列表中应实时显示这 10 条 "Test message N" 消息，包含正确的 PID 和进程名 "powershell"。
+
+4. **高速日志流测试**
+
+```pwsh
+1..1000 | ForEach-Object { [DebugHelper]::OutputDebugStringA("Stress test message $_") }
+```
+
+**预期**：消息全部被捕获，UI 不卡顿，自动滚动流畅。
+
+5. **过滤功能测试**
+
+- 在过滤框中输入 "Stress" → 只显示包含 "Stress" 的消息
+- 清除过滤 → 恢复显示所有消息

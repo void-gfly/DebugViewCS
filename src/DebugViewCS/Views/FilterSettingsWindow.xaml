@@ -1,0 +1,121 @@
+<ui:FluentWindow
+    x:Class="DebugViewCS.Views.FilterSettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    xmlns:vm="clr-namespace:DebugViewCS.ViewModels"
+    Title="过滤与高级设置"
+    Width="500" Height="450"
+    WindowStartupLocation="CenterOwner"
+    ExtendsContentIntoTitleBar="True">
+
+    <Window.DataContext>
+        <vm:FilterSettingsViewModel />
+    </Window.DataContext>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="过滤与高级设置" ShowMaximize="False" ShowMinimize="False" />
+
+        <TabControl Grid.Row="1" Margin="10,0,10,10">
+            <!-- 内容过滤 Tab -->
+            <TabItem Header="内容过滤">
+                <Grid Margin="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
+                        <TextBlock Text="过滤模式：" VerticalAlignment="Center" Margin="0,0,5,0" />
+                        <ComboBox Width="120"
+                                  ItemsSource="{Binding AvailableFilterModes}"
+                                  SelectedItem="{Binding Settings.ProcessFilterMode}" />
+                    </StackPanel>
+
+                    <ListView Grid.Row="1" ItemsSource="{Binding Settings.ProcessFilters}" SelectedItem="{Binding SelectedProcessFilter}" BorderThickness="1">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="进程名" Width="400">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" />
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+
+                    <Grid Grid.Row="2" Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Text="{Binding NewProcessName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0" VerticalAlignment="Center" />
+                        <ui:Button Grid.Column="1" Content="添加" Command="{Binding AddProcessCommand}" Margin="0,0,10,0" VerticalAlignment="Center" />
+                        <ui:Button Grid.Column="2" Content="删除" Command="{Binding RemoveProcessCommand}" VerticalAlignment="Center" />
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- 内容颜色 Tab -->
+            <TabItem Header="内容颜色">
+                <Grid Margin="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Margin="0,0,0,10" Foreground="{DynamicResource TextFillColorSecondaryBrush}" TextWrapping="Wrap">
+                        <Run Text="添加检测文本（双击列表项条目可修改颜色，在文本框编辑检测词）" />
+                        <LineBreak />
+                        <Run Text="注意: 规则优先级为从上到下。当一条日志匹配到前面的规则时将自动应用该颜色并退出后续匹配。" FontSize="11" Foreground="#FFD29922" />
+                    </TextBlock>
+
+                    <ListView Grid.Row="1" ItemsSource="{Binding Settings.ColorFilters}" SelectedItem="{Binding SelectedColorRule}" MouseDoubleClick="ColorListView_MouseDoubleClick" BorderThickness="1">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="检测文本（模糊匹配）" Width="200">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBox Text="{Binding MatchText, UpdateSourceTrigger=PropertyChanged}" Background="Transparent" BorderThickness="0" Margin="0" />
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Header="颜色代码（HEX）" Width="100">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding ColorHex}" VerticalAlignment="Center" />
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Header="颜色预览" Width="80">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border Width="40" Height="20" Background="{Binding ColorHex, FallbackValue=Transparent}" CornerRadius="2" BorderThickness="1" BorderBrush="#33FFFFFF" />
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                        <ui:Button Content="上移" Command="{Binding MoveUpColorRuleCommand}" Margin="0,0,10,0" />
+                        <ui:Button Content="下移" Command="{Binding MoveDownColorRuleCommand}" Margin="0,0,10,0" />
+                        <ui:Button Content="新增规则" Command="{Binding AddColorRuleCommand}" Margin="0,0,10,0" />
+                        <ui:Button Content="删除选择项" Command="{Binding RemoveColorRuleCommand}" />
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</ui:FluentWindow>

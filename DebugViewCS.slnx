@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DebugViewCS.Core/DebugViewCS.Core.csproj" />
+    <Project Path="src/DebugViewCS/DebugViewCS.csproj" />
+  </Folder>
+</Solution>
