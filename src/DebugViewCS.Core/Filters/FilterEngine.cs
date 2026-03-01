@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.RegularExpressions;
 using DebugViewCS.Core.Models;
 using DebugViewCS.Core.Settings;
@@ -117,7 +118,7 @@ public static class FilterEngine
         bool matchProcess = false;
         foreach (var proc in processFilters)
         {
-            if (entry.ProcessName.Contains(proc, StringComparison.OrdinalIgnoreCase))
+            if (IsProcessMatch(entry.ProcessName, proc))
             {
                 matchProcess = true;
                 break;
@@ -134,5 +135,48 @@ public static class FilterEngine
             // 排除模式：匹配到了就不显示
             return !matchProcess;
         }
+    }
+
+    private static bool IsProcessMatch(string processName, string filterText)
+    {
+        var normalizedProcess = NormalizeProcessToken(processName);
+        var normalizedFilter = NormalizeProcessToken(filterText);
+
+        if (string.IsNullOrEmpty(normalizedProcess) || string.IsNullOrEmpty(normalizedFilter))
+        {
+            return false;
+        }
+
+        // 优先走标准化后的精确匹配，避免 ".exe" / 路径 / 空白带来的误判
+        if (string.Equals(normalizedProcess, normalizedFilter, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // 保留历史的模糊匹配行为，兼容用户已有过滤配置
+        return normalizedProcess.Contains(normalizedFilter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeProcessToken(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return string.Empty;
+        }
+
+        var normalized = token.Trim().Trim('"');
+
+        // 支持用户输入完整路径
+        if (normalized.Contains('\\') || normalized.Contains('/'))
+        {
+            normalized = Path.GetFileName(normalized);
+        }
+
+        if (normalized.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = normalized[..^4];
+        }
+
+        return normalized.Trim();
     }
 }

@@ -24,9 +24,10 @@ public partial class FilterSettingsViewModel : ObservableObject
     [RelayCommand]
     private void AddProcess()
     {
-        if (!string.IsNullOrWhiteSpace(NewProcessName) && !Settings.ProcessFilters.Contains(NewProcessName, StringComparer.OrdinalIgnoreCase))
+        var processName = NewProcessName.Trim();
+        if (!string.IsNullOrWhiteSpace(processName) && !Settings.ProcessFilters.Contains(processName, StringComparer.OrdinalIgnoreCase))
         {
-            Settings.ProcessFilters.Add(NewProcessName);
+            Settings.ProcessFilters.Add(processName);
             NewProcessName = string.Empty;
         }
     }

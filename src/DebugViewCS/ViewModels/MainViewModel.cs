@@ -256,7 +256,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private void AddProcessToFilter(LogEntry? entry)
     {
         if (entry == null) return;
-        var processName = entry.ProcessName;
+        var processName = entry.ProcessName.Trim();
         if (string.IsNullOrWhiteSpace(processName)) return;
 
         var filters = SettingsManager.Settings.ProcessFilters;
